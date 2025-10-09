@@ -1,3 +1,7 @@
+use node::node::Node;
+
+
 fn main() {
-    println!("Hello, world!");
+    let mut node = Node::new();
+    node.run();
 }
