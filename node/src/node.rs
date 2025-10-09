@@ -71,14 +71,9 @@ impl Node {
     pub fn run(&mut self)  {
         loop {
             let mut maelstrom_msg: MaelstromMessage = String::new().into();
-            match io::stdin().read_line(&mut maelstrom_msg.0) {
-                Err(e) => {
-                    eprintln!("error occur while taking an output... {e}");
-                    continue
-                }
-                Ok(_) => {
-                    eprintln!("Received: {}", maelstrom_msg.0);
-                }
+            if let Err(e) = io::stdin().read_line(&mut maelstrom_msg.0) {
+                eprintln!("error occur while taking an output... {e}");
+                continue
             }
 
             let des_message = match maelstrom_msg.to_deserialized_msg() {
@@ -89,15 +84,8 @@ impl Node {
                 }
             };
 
-            eprintln!("{:?}", des_message);
-
-            match self.handle_message(des_message) {
-                Ok(()) => {
-                    eprintln!("message was handled and sent")
-                },
-                Err(e) => {
-                    eprintln!("error occur while handling a message: {e}")
-                }
+            if let Err(e) = self.handle_message(des_message) {
+                eprintln!("error occur while handling a message: {e}")
             }
 
         }
