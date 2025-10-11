@@ -24,62 +24,6 @@ impl Message {
         self.body().echo.as_ref()
     }
 
-    // pub fn generate_reply_msg(self) -> Self {
-    //     match self.typ() {
-    //         "init" => {
-    //             let msg_id = self.msg_id().unwrap();
-    //             Message {
-    //                 src: String::from(&self.dest),
-    //                 dest: String::from(&self.src),
-    //                 body: MessageBody {
-    //                     msg_type: String::from("init_ok"),
-    //                     msg_id: None,
-    //                     echo: None,
-    //                     id: None,
-    //                     in_reply_to: Some(msg_id).copied(),
-    //                     node_ids: None,
-    //                     node_id: None
-    //                 }
-    //             }
-    //         },
-    //         "echo" => {
-    //             let msg_id = self.msg_id().unwrap();
-    //             let echo = self.echo().unwrap();
-    //             Message {
-    //                 src: String::from(&self.dest),
-    //                 dest: String::from(&self.src),
-    //                 body: MessageBody {
-    //                     msg_type: String::from("echo_ok"),
-    //                     msg_id: Some(msg_id).copied(),
-    //                     in_reply_to: Some(msg_id).copied(),
-    //                     echo: Some(String::from(echo)),
-    //                     id: None,
-    //                     node_ids: None,
-    //                     node_id: None
-    //                 }
-    //             }
-    //         },
-    //         "generate" => {
-    //             let msg_id = self.msg_id().unwrap();
-    //             Message {
-    //                 src: String::from(&self.dest),
-    //                 dest: String::from(&self.src),
-    //                 body: MessageBody {
-    //                     msg_type: String::from("generate_ok"),
-    //                     msg_id: Some(msg_id).copied(),
-    //                     in_reply_to: Some(msg_id).copied(),
-    //                     echo: None,
-    //                     id: None,
-    //                     node_ids: None,
-    //                     node_id: None
-    //                 }
-    //             }
-    //         }
-    //         _ => {unimplemented!()}
-    //     }
-    //
-    // }
-
     pub fn node_id(&self) -> Option<String> {
         if let Some(node_id) = &self.body().node_id {
             Some(node_id.to_string())
