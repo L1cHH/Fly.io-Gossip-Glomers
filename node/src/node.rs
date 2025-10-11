@@ -1,20 +1,30 @@
 use std::error::Error;
 use std::io;
 use std::io::Write;
-use crate::message::{MaelstromMessage, Message};
+use crate::message::{MaelstromMessage, Message, MessageBody};
+use crate::id_generator::IdGenerator;
 
 pub struct Node {
     id: Option<String>,
     node_ids: Option<Vec<String>>,
+    id_generator: IdGenerator,
     handlers: std::collections::HashMap<String, Box<dyn FnMut(Message)>>
 }
 
 impl Node {
 
+    fn node_id(&self) -> Option<&String> {
+        match &self.id {
+            Some(id) => Some(id),
+            None => None
+        }
+    }
+
     pub fn new() -> Self {
         Node {
             id: None,
             node_ids: None,
+            id_generator: IdGenerator::new(),
             handlers: std::collections::HashMap::new(),
         }
     }
@@ -33,18 +43,64 @@ impl Node {
         }
     }
 
-    fn use_default_handler(&mut self, init_msg: Message) -> Result<(), Box<dyn Error>> {
-        match init_msg.typ() {
+    fn use_default_handler(&mut self, msg: Message) -> Result<(), Box<dyn Error>> {
+        let msg_id = msg.msg_id().unwrap();
+        match msg.typ() {
             "init" => {
-                self.init_node(init_msg.node_id().unwrap(), init_msg.node_ids().unwrap());
-                let msg = init_msg.generate_reply_msg();
+                self.init_node(msg.node_id().unwrap(), msg.node_ids().unwrap());
+                let msg = Message {
+                    src: String::from(&msg.dest),
+                    dest: String::from(&msg.src),
+                    body: MessageBody {
+                        msg_type: String::from("init_ok"),
+                        msg_id: None,
+                        echo: None,
+                        id: None,
+                        in_reply_to: Some(msg_id).copied(),
+                        node_ids: None,
+                        node_id: None
+                    }
+                };
                 self.reply(msg)
             },
 
-            _ => {
-                let msg = init_msg.generate_reply_msg();
+            "echo" => {
+                let echo = msg.echo().unwrap();
+                let msg = Message {
+                    src: String::from(&msg.dest),
+                    dest: String::from(&msg.src),
+                    body: MessageBody {
+                        msg_type: String::from("echo_ok"),
+                        msg_id: Some(msg_id).copied(),
+                        in_reply_to: Some(msg_id).copied(),
+                        echo: Some(String::from(echo)),
+                        id: None,
+                        node_ids: None,
+                        node_id: None
+                    }
+                };
                 self.reply(msg)
-            }
+            },
+
+            "generate" => {
+                let node_id = self.node_id().unwrap().to_string();
+                let id = &self.id_generator.generate(&node_id);
+                let msg = Message {
+                    src: String::from(&msg.dest),
+                    dest: String::from(&msg.src),
+                    body: MessageBody {
+                        msg_type: String::from("generate_ok"),
+                        msg_id: Some(msg_id).copied(),
+                        in_reply_to: Some(msg_id).copied(),
+                        echo: None,
+                        id: Some(*id),
+                        node_ids: None,
+                        node_id: None
+                    }
+                };
+                self.reply(msg)
+            },
+            _ => {unimplemented!()}
         }
     }
 
