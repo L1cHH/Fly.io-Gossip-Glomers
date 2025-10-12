@@ -8,7 +8,8 @@ pub struct Node {
     id: Option<String>,
     node_ids: Option<Vec<String>>,
     id_generator: IdGenerator,
-    handlers: std::collections::HashMap<String, Box<dyn FnMut(Message)>>
+    handlers: std::collections::HashMap<String, Box<dyn FnMut(Message)>>,
+    saved_messages: Vec<u32>
 }
 
 impl Node {
@@ -26,7 +27,12 @@ impl Node {
             node_ids: None,
             id_generator: IdGenerator::new(),
             handlers: std::collections::HashMap::new(),
+            saved_messages: Vec::new()
         }
+    }
+
+    fn save_message(&mut self, msg: u32) {
+        self.saved_messages.push(msg)
     }
 
     fn init_node(&mut self, node_id: String, node_ids: Vec<String>) {
@@ -45,20 +51,14 @@ impl Node {
 
     fn use_default_handler(&mut self, msg: Message) -> Result<(), Box<dyn Error>> {
         let msg_id = msg.msg_id().unwrap();
-        match msg.typ() {
+        match msg.typ().as_str() {
             "init" => {
                 self.init_node(msg.node_id().unwrap(), msg.node_ids().unwrap());
                 let msg = Message {
                     src: String::from(&msg.dest),
                     dest: String::from(&msg.src),
-                    body: MessageBody {
-                        msg_type: String::from("init_ok"),
-                        msg_id: None,
-                        echo: None,
-                        id: None,
-                        in_reply_to: Some(msg_id).copied(),
-                        node_ids: None,
-                        node_id: None
+                    body: MessageBody::InitOk {
+                        in_reply_to: *msg_id
                     }
                 };
                 self.reply(msg)
@@ -69,14 +69,10 @@ impl Node {
                 let msg = Message {
                     src: String::from(&msg.dest),
                     dest: String::from(&msg.src),
-                    body: MessageBody {
-                        msg_type: String::from("echo_ok"),
-                        msg_id: Some(msg_id).copied(),
-                        in_reply_to: Some(msg_id).copied(),
-                        echo: Some(String::from(echo)),
-                        id: None,
-                        node_ids: None,
-                        node_id: None
+                    body: MessageBody::EchoOk {
+                        msg_id: *msg_id,
+                        in_reply_to: *msg_id,
+                        echo: String::from(echo)
                     }
                 };
                 self.reply(msg)
@@ -88,18 +84,54 @@ impl Node {
                 let msg = Message {
                     src: String::from(&msg.dest),
                     dest: String::from(&msg.src),
-                    body: MessageBody {
-                        msg_type: String::from("generate_ok"),
-                        msg_id: Some(msg_id).copied(),
-                        in_reply_to: Some(msg_id).copied(),
-                        echo: None,
-                        id: Some(*id),
-                        node_ids: None,
-                        node_id: None
+                    body: MessageBody::GenerateOk {
+                        msg_id: *msg_id,
+                        in_reply_to: *msg_id,
+                        id: *id
                     }
                 };
                 self.reply(msg)
             },
+
+            "broadcast" => {
+                if let MessageBody::Broadcast {message, msg_id} = msg.body {
+                    self.save_message(message);
+                    let msg = Message {
+                        src: String::from(&msg.dest),
+                        dest: String::from(&msg.src),
+                        body: MessageBody::BroadcastOk {
+                            in_reply_to: msg_id,
+                        }
+                    };
+                    self.reply(msg)
+                } else {
+                    unreachable!()
+                }
+            },
+
+            "read" => {
+                let msg = Message {
+                    src: String::from(&msg.dest),
+                    dest: String::from(&msg.src),
+                    body: MessageBody::ReadOk {
+                        messages: self.saved_messages.clone(),
+                        in_reply_to: *msg_id,
+                    }
+                };
+                self.reply(msg)
+            },
+
+            "topology" => {
+                let msg = Message {
+                    src: String::from(&msg.dest),
+                    dest: String::from(&msg.src),
+                    body: MessageBody::TopologyOk {
+                        in_reply_to: *msg_id,
+                    }
+                };
+
+                self.reply(msg)
+            }
             _ => {unimplemented!()}
         }
     }
@@ -114,11 +146,13 @@ impl Node {
 
     fn handle_message(&mut self, msg: Message) -> Result<(), Box<dyn Error>> {
 
-        if !self.handlers.contains_key(msg.typ()) {
+        let msg_type = msg.typ();
+
+        if !self.handlers.contains_key(&msg_type) {
             return self.use_default_handler(msg)
         }
 
-        let handler = self.handlers.get_mut(msg.typ()).unwrap();
+        let handler = self.handlers.get_mut(&msg_type).unwrap();
 
         Ok((*handler)(msg))
 
