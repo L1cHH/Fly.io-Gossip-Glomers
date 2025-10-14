@@ -1,6 +1,7 @@
 use node::node::Node;
 
-fn main() {
-    let mut node = Node::new();
-    node.run()
+#[tokio::main]
+async fn main() {
+    let mut node = Node::new().await;
+    let _ = node.run().await;
 }

@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 node = {path = "../node"}
+tokio = { version = "1.47.1", features = ["macros"] }

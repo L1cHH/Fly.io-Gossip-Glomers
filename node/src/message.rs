@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub src: String,
     pub dest: String,
@@ -84,7 +84,7 @@ impl Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum MessageBody {
     #[serde(rename = "echo")]
@@ -106,7 +106,7 @@ pub enum MessageBody {
     #[serde(rename = "read")]
     Read {msg_id: u32},
     #[serde(rename = "read_ok")]
-    ReadOk {in_reply_to: u32, messages: Vec<u32>},
+    ReadOk {in_reply_to: u32, messages: std::collections::HashSet<u32>},
     #[serde(rename = "topology")]
     Topology {msg_id: u32, topology: std::collections::HashMap<String, Vec<String>>},
     #[serde(rename = "topology_ok")]
