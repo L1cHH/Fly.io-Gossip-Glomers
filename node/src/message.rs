@@ -1,13 +1,16 @@
+use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Message {
+pub struct Message<Body> {
     pub src: String,
     pub dest: String,
-    pub body: MessageBody
+    pub body: Body
 }
 
-impl Message {
+
+impl Message<MessageBody> {
     pub fn typ(&self) -> String {
         match &self.body() {
             MessageBody::Init {..} => String::from("init"),
@@ -22,6 +25,9 @@ impl Message {
             MessageBody::ReadOk {..} => String::from("read_ok"),
             MessageBody::Topology {..} => String::from("topology"),
             MessageBody::TopologyOk {..} => String::from("topology_ok"),
+            MessageBody::Add {..} => String::from("add"),
+            MessageBody::AddOk {..} => String::from("add_ok"),
+            MessageBody::ShareCounterState {..} => String::from("share_counter_state")
         }
     }
 
@@ -84,45 +90,61 @@ impl Message {
     }
 }
 
+impl Into<MessageForm> for Message<MessageBody> {
+    fn into(self) -> MessageForm {
+        MessageForm::NodeMessage(self)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum MessageBody {
-    #[serde(rename = "echo")]
     Echo {msg_id: u32, echo: String},
-    #[serde(rename = "init")]
     Init {msg_id: u32, node_id: String, node_ids: Vec<String>},
-    #[serde(rename = "init_ok")]
     InitOk {in_reply_to: u32},
-    #[serde(rename = "echo_ok")]
     EchoOk {msg_id: u32, in_reply_to: u32, echo: String},
-    #[serde(rename = "generate")]
     Generate {msg_id: u32},
-    #[serde(rename = "generate_ok")]
     GenerateOk {msg_id: u32, id: u32, in_reply_to: u32},
-    #[serde(rename = "broadcast")]
     Broadcast {msg_id: u32, message: u32},
-    #[serde(rename = "broadcast_ok")]
     BroadcastOk {in_reply_to: u32},
-    #[serde(rename = "read")]
+    Topology {msg_id: u32, topology: HashMap<String, Vec<String>>},
+    TopologyOk {in_reply_to: u32},
+    Add {msg_id: u32, delta: u32},
+    AddOk {in_reply_to: u32},
     Read {msg_id: u32},
-    #[serde(rename = "read_ok")]
-    ReadOk {in_reply_to: u32, messages: std::collections::HashSet<u32>},
-    #[serde(rename = "topology")]
-    Topology {msg_id: u32, topology: std::collections::HashMap<String, Vec<String>>},
-    #[serde(rename = "topology_ok")]
-    TopologyOk {in_reply_to: u32}
+    ReadOk {in_reply_to: u32, value: u32},
+    ShareCounterState {value: u32}
+}
+
+pub enum MessageForm {
+    NodeMessage(Message<MessageBody>)
 }
 
 
+#[derive(Deserialize)]
+pub struct RawMessage {
+    src: String,
+    dest: String,
+    body: serde_json::Value
+}
+
 pub struct MaelstromMessage(pub String);
 impl MaelstromMessage {
-    pub fn to_deserialized_msg(&self) -> serde_json::Result<Message> {
-        let des_message: Message = serde_json::from_str(&self.0)?;
-        Ok(des_message)
+    pub fn to_deserialized_msg(&self) -> serde_json::Result<MessageForm> {
+        let raw_msg: RawMessage = serde_json::from_str(&self.0)?;
+        let body: MessageBody = serde_json::from_value(raw_msg.body)?;
+        Ok(MessageForm::NodeMessage(Message {
+            src: raw_msg.src,
+            dest: raw_msg.dest,
+            body
+        }))
     }
 
-    pub fn from_deserialized_msg(des_msg: Message) -> serde_json::Result<String> {
-        let ser_message = serde_json::to_string(&des_msg)?;
+    pub fn from_deserialized_msg(des_msg: MessageForm) -> serde_json::Result<String> {
+        let ser_message = match des_msg {
+            MessageForm::NodeMessage(node_msg) => serde_json::to_string(&node_msg)?,
+        };
+
         Ok(ser_message)
     }
 }
