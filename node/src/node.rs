@@ -6,6 +6,7 @@ use tokio::sync::{Mutex, oneshot, mpsc};
 use crate::counter::Counter;
 use crate::message::{MaelstromMessage, Message, MessageBody, MessageForm};
 use crate::id_generator::IdGenerator;
+use crate::kafka::Kafka;
 
 pub struct Node {
     id: Option<String>,
@@ -14,7 +15,8 @@ pub struct Node {
     saved_messages: HashSet<u32>,
     broadcast_pending: Arc<Mutex<HashMap<u32, oneshot::Sender<()>>>>,
     output_sender: mpsc::UnboundedSender<MessageForm>,
-    counter: Counter
+    counter: Counter,
+    kafka: Kafka
 }
 
 impl Node {
@@ -37,7 +39,8 @@ impl Node {
             saved_messages: HashSet::new(),
             broadcast_pending: Arc::new(Mutex::new(HashMap::new())),
             output_sender: tx,
-            counter: Counter::new()
+            counter: Counter::new(),
+            kafka: Kafka::new(),
         }
     }
 
@@ -243,6 +246,83 @@ impl Node {
         self.counter.add(&msg.src, value, true).await;
     }
 
+    fn handle_send(&mut self, node_msg: Message<MessageBody>) -> Result<(), Box<dyn Error>>{
+        let MessageBody::Send {msg_id, key, msg} = node_msg.body else {
+            return Ok(())
+        };
+
+        let offset = self.kafka.write_log(key, msg);
+
+        let msg = Message {
+            src: String::from(&node_msg.dest),
+            dest: String::from(&node_msg.src),
+            body: MessageBody::SendOk {
+                in_reply_to: msg_id,
+                offset,
+            }
+        };
+
+        Ok(self.output_sender.send(msg.into()).map_err(|e| Box::new(e) as Box<dyn Error>)?)
+    }
+
+    fn handle_poll(&self, msg: Message<MessageBody>) -> Result<(), Box<dyn Error>> {
+        let MessageBody::Poll {msg_id, offsets} = msg.body else {
+            return Ok(())
+        };
+
+        let msgs = self.kafka.read_logs(offsets);
+
+        let msg = Message {
+            src: String::from(&msg.dest),
+            dest: String::from(&msg.src),
+            body: MessageBody::PollOk {
+                in_reply_to: msg_id,
+                msgs,
+            }
+        };
+
+        Ok(self.output_sender.send(msg.into()).map_err(|e| Box::new(e) as Box<dyn Error>)?)
+    }
+
+    fn handle_commit_offsets(&mut self, node_msg: Message<MessageBody>) -> Result<(), Box<dyn Error>> {
+        let MessageBody::CommitOffsets {msg_id, offsets} = node_msg.body else {
+            return Ok(())
+        };
+
+        let msg = Message {
+            src: String::from(&node_msg.dest),
+            dest: String::from(&node_msg.src),
+            body: MessageBody::CommitOffsetsOk {
+                in_reply_to: msg_id,
+            }
+        };
+
+        self.kafka.commit_offsets(node_msg.src, offsets);
+
+
+
+        Ok(self.output_sender.send(msg.into()).map_err(|e| Box::new(e) as Box<dyn Error>)?)
+    }
+
+    fn handle_list_commited_offsets(&self, msg: Message<MessageBody>) -> Result<(), Box<dyn Error>> {
+        let MessageBody::ListCommittedOffsets {msg_id, keys} = msg.body else {
+            return Ok(())
+        };
+
+        let commited_offsets = self.kafka.get_commited_offsets(&msg.src, keys);
+
+        let msg = Message {
+            src: String::from(&msg.dest),
+            dest: String::from(&msg.src),
+            body: MessageBody::ListCommittedOffsetsOk {
+                in_reply_to: msg_id,
+                offsets: commited_offsets
+            }
+        };
+
+        Ok(self.output_sender.send(msg.into()).map_err(|e| Box::new(e) as Box<dyn Error>)?)
+    }
+
     async fn handle_message(&mut self, msg_form: MessageForm) -> Result<(), Box<dyn Error>> {
 
         match msg_form {
@@ -258,6 +338,10 @@ impl Node {
                     "read" => self.handle_read(node_msg).await?,
                     "add" => self.handle_add(node_msg).await?,
                     "share_counter_state" => self.handle_share_counter_state(node_msg).await,
+                    "send" => self.handle_send(node_msg)?,
+                    "poll" => self.handle_poll(node_msg)?,
+                    "commit_offsets" => self.handle_commit_offsets(node_msg)?,
+                    "list_committed_offsets" => self.handle_list_commited_offsets(node_msg)?,
                     _ => unimplemented!()
                 }
             },

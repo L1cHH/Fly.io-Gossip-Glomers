@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, Mutex};
 use crate::message::{Message, MessageBody, MessageForm};
 
 pub struct Counter {
-    value: Arc<Mutex<HashMap<String, u32>>>
+    value: Arc<Mutex<HashMap<String, i32>>>
 }
 
 
@@ -17,7 +17,7 @@ impl Counter {
         }
     }
 
-    pub async fn add(&mut self, node_id: &String, value: u32, with_replace: bool) {
+    pub async fn add(&mut self, node_id: &String, value: i32, with_replace: bool) {
         let mut guard = self.value.lock().await;
 
         match guard.get_mut(node_id) {
@@ -32,7 +32,7 @@ impl Counter {
         }
     }
 
-    pub async fn read(&self) -> u32 {
+    pub async fn read(&self) -> i32 {
         let guard = self.value.lock().await;
         guard.values().map(|v| v).sum()
     }

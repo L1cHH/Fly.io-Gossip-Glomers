@@ -27,7 +27,15 @@ impl Message<MessageBody> {
             MessageBody::TopologyOk {..} => String::from("topology_ok"),
             MessageBody::Add {..} => String::from("add"),
             MessageBody::AddOk {..} => String::from("add_ok"),
-            MessageBody::ShareCounterState {..} => String::from("share_counter_state")
+            MessageBody::ShareCounterState {..} => String::from("share_counter_state"),
+            MessageBody::Send {..} => String::from("send"),
+            MessageBody::SendOk {..} => String::from("send_ok"),
+            MessageBody::Poll {..} => String::from("poll"),
+            MessageBody::PollOk {..} => String::from("poll_ok"),
+            MessageBody::CommitOffsets {..} => String::from("commit_offsets"),
+            MessageBody::CommitOffsetsOk {..} => String::from("commit_offsets_ok"),
+            MessageBody::ListCommittedOffsets {..} => String::from("list_committed_offsets"),
+            MessageBody::ListCommittedOffsetsOk {..} => String::from("list_committed_offsets_ok"),
         }
     }
 
@@ -109,11 +117,19 @@ pub enum MessageBody {
     BroadcastOk {in_reply_to: u32},
     Topology {msg_id: u32, topology: HashMap<String, Vec<String>>},
     TopologyOk {in_reply_to: u32},
-    Add {msg_id: u32, delta: u32},
+    Add {msg_id: u32, delta: i32},
     AddOk {in_reply_to: u32},
     Read {msg_id: u32},
-    ReadOk {in_reply_to: u32, value: u32},
-    ShareCounterState {value: u32}
+    ReadOk {in_reply_to: u32, value: i32},
+    ShareCounterState {value: i32},
+    Send {key: String, msg: u32, msg_id: u32},
+    SendOk {offset: usize, in_reply_to: u32},
+    Poll {offsets: HashMap<String, usize>, msg_id: u32},
+    PollOk {in_reply_to: u32, msgs: HashMap<String, Vec<(usize, u32)>>},
+    CommitOffsets {msg_id: u32, offsets: HashMap<String, usize>},
+    CommitOffsetsOk {in_reply_to: u32},
+    ListCommittedOffsets {keys: Vec<String>, msg_id: u32},
+    ListCommittedOffsetsOk {in_reply_to: u32, offsets: HashMap<String, usize>}
 }
 
 pub enum MessageForm {
